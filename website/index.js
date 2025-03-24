@@ -1,47 +1,90 @@
 alert("hello")
-async function getFloorLevel(averageFloorHeight = 3) {
-    if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser.");
-        return;
-    }
+const canvas = document.getElementById("floorCanvas");
+const ctx = canvas.getContext("2d");
 
-    navigator.geolocation.getCurrentPosition(
-        async (position) => {
-            let latitude = position.coords.latitude;
-            let longitude = position.coords.longitude;
-
-            try {
-                const altitude = await getAltitudeFromOpenElevation(latitude, longitude);
-                if (altitude !== null) {
-                    const floorLevel = Math.round(altitude / averageFloorHeight);
-                    document.getElementById("floor-output").textContent = `Floor Level: ${floorLevel - 83}`;
-                } else {
-                    alert("Unable to retrieve altitude.");
+// Building data
+const building = {
+    latitude: 39.1705148,
+    longitude: -86.5130371,
+    floors: {
+        "1": {
+            image_url: "buildings/Teter_Quad/Rabb/floors/floor_1.png",
+            rooms: {
+                "110": {
+                    x: 540,
+                    y: 350,
+                    label: "Room 110",
+                    latitude: 39.1706973,
+                    longitude: -86.5130489
                 }
-            } catch (error) {
-                alert("Error retrieving altitude data.");
             }
-        },
-        (error) => {
-            alert("Error getting location: " + error.message);
-        },
-        { enableHighAccuracy: true }
-    );
-}
+        }
+    }
+};
 
-async function getAltitudeFromOpenElevation(lat, lon) {
-    const url = `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`;
-    const response = await fetch(url);
-    const data = await response.json();
+// Room 110 data
+const room110 = building.floors["1"].rooms["110"];
 
-    if (data && data.results.length > 0) {
-        return data.results[0].elevation;  // Return the altitude in meters
-    } else {
-        return null;
+// Load floor plan image
+const img = new Image();
+img.src = building.floors["1"].image_url;
+img.onload = () => drawFloorPlan();
+
+// Function to draw the floor plan
+function drawFloorPlan(userX = null, userY = null) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Draw transparent radius around Room 110
+    ctx.beginPath();
+    ctx.arc(room110.x, room110.y, 30, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+    ctx.fill();
+
+    // Draw Room 110 marker
+    ctx.beginPath();
+    ctx.arc(room110.x, room110.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "red";
+    ctx.fill();
+
+    // Draw user position if available
+    if (userX !== null && userY !== null) {
+        ctx.beginPath();
+        ctx.arc(userX, userY, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+
+        // Draw path from user to Room 110
+        ctx.beginPath();
+        ctx.moveTo(userX, userY);
+        ctx.lineTo(room110.x, room110.y);
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 3;
+        ctx.stroke();
     }
 }
 
+// Function to convert real-world lat/lon to canvas coordinates
+function convertToCanvasCoords(userLat, userLon) {
+    const latDiff = userLat - building.latitude;
+    const lonDiff = userLon - building.longitude;
 
-function get_floor_level() {
-    getFloorLevel();
+    const scaleX = 100000; // Adjust this to map lat/lon properly
+    const scaleY = 100000;
+
+    const userX = 400 + lonDiff * scaleX;
+    const userY = 400 - latDiff * scaleY;
+
+    return { userX, userY };
 }
+
+// Get user's real-time location
+navigator.geolocation.watchPosition(
+    (position) => {
+        const { latitude, longitude } = position.coords;
+        const { userX, userY } = convertToCanvasCoords(latitude, longitude);
+        drawFloorPlan(userX, userY);
+    },
+    (error) => console.error("Error getting location:", error),
+    { enableHighAccuracy: true }
+);
