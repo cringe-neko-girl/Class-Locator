@@ -1,21 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Floor Plan Navigation</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Floor Plan with Location</title>
     <style>
-        canvas {
+        #floorCanvas {
             border: 1px solid black;
-            display: block;
-            margin: auto;
+            background-color: #f4f4f4;
+        }
+
+        #locationDisplay {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 16px;
         }
     </style>
 </head>
+
 <body>
-    <h1 style="text-align:center;">Floor Plan Navigation</h1>
-    <canvas id="floorCanvas" width="800" height="800"></canvas>
-    
-    <script src="index.js"></script>
+    <canvas id="floorCanvas" width="1200" height="1200"></canvas>
+    <div id="locationDisplay">Loading Location...</div>
+
+    <script>
+        const canvas = document.getElementById("floorCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const building = {
+            latitude: 39.1705148,
+            longitude: -86.5130371,
+            floors: {
+                "1": {
+                    image_url: "floor_1.png", // Replace with your actual image URL
+                    rooms: {
+                        "110": {
+                            x: 5406,
+                            y: 2600,
+                            label: "Room 110",
+                            latitude: 39.1706973,
+                            longitude: -86.5130489
+                        }
+                    }
+                }
+            }
+        };
+
+        const room110 = building.floors["1"].rooms["110"];
+        let imgScale = 1;
+
+        const img = new Image();
+        img.src = building.floors["1"].image_url;
+
+        img.onload = () => {
+            imgScale = canvas.width / img.width;
+            room110.canvasX = room110.x * imgScale;
+            room110.canvasY = room110.y * imgScale;
+            drawFloorPlan(); // Draw floor plan on load
+        };
+
+        img.onerror = () => {
+            alert("Error: Floor plan image not found.");
+        };
+
+        const PIXELS_PER_DEGREE_LON = 100000;
+        const PIXELS_PER_DEGREE_LAT = 100000;
+
+        function convertToCanvasCoords(userLat, userLon) {
+            const dLat = userLat - room110.latitude;
+            const dLon = userLon - room110.longitude;
+            const offsetX = dLon * PIXELS_PER_DEGREE_LON;
+            const offsetY = dLat * PIXELS_PER_DEGREE_LAT;
+
+            const userX = room110.canvasX + offsetX * imgScale;
+            const userY = room110.canvasY - offsetY * imgScale;
+
+            return { userX, userY };
+        }
+
+        class Destination {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 5;
+                this.color = "red";
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        class User {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 5;
+                this.color = "blue";
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        function drawFloorPlan(userX = null, userY = null) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (img.complete) {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            }
+
+            const destination = new Destination(room110.canvasX, room110.canvasY);
+            destination.draw();
+
+            if (userX !== null && userY !== null) {
+                const user = new User(userX, userY);
+                user.draw();
+            }
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+
+                // Convert user's geolocation to canvas coordinates
+                const { userX, userY } = convertToCanvasCoords(latitude, longitude);
+                
+                // Draw the floor plan with the user location
+                drawFloorPlan(userX, userY);
+
+                // Display user's coordinates
+                document.getElementById("locationDisplay").innerHTML =
+                    `Latitude: ${latitude.toFixed(6)}<br>Longitude: ${longitude.toFixed(6)}`;
+            }, function (error) {
+                alert(`Geolocation error: ${error.code} - ${error.message}`);
+                document.getElementById("locationDisplay").innerHTML = "Error fetching location. Please ensure location permissions are enabled.";
+            }, {
+                enableHighAccuracy: true,  // Use high accuracy for better location fetching
+                timeout: 10000,            // Timeout of 10 seconds for geolocation
+                maximumAge: 0             // Force fresh location
+            });
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    </script>
 </body>
+
 </html>
